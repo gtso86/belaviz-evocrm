@@ -9,17 +9,36 @@ This repository is the umbrella of the CRM Community family: it orchestrates the
 
 ## [Unreleased]
 
-### Added
+## [v1.0.0-rc5] - 2026-05-27
 
-- N/A
+Hardening release focused on **fresh-install reliability**. The previous rc4 image set, when deployed against an empty Postgres database with all services starting in parallel, hit a race where `evo-ai-processor-community` (Python/SQLAlchemy) created a foreign-key stub `users(id integer)` table before `evo-auth-service-community` (Rails) ran its `InitSchema` migration. The auth service then silently skipped its own `create_table :users` via `if_not_exists: true`, leaving authentication permanently broken (every call ended in `PG::UndefinedTable: relation "oauth_access_tokens" does not exist`, surfaced as 503 cascades in the CRM).
 
-### Changed
+This release also closes a second-order issue introduced in rc4: the `Licensing::SetupGate` middleware was returning `503 SETUP_REQUIRED` for every non-bypass route whenever the licensing server was unreachable on first boot — bricking the CRM API even after the auth fixes. SetupGate now never blocks requests; licensing remains as observability only.
 
-- N/A
+On the feature side, **EvoFlow expansion**: the CRM ships a `contact_events` backfill worker (ports historical Message activity + ReportingEvent rows into evo-flow's ClickHouse via `/events/batch`), the Ruby mirror of the EvoFlow event schema with `SchemaValidator`, and five new flow node types backed by shared `ActionService` handlers. The frontend ships a shared `EventSelector` + `EventPropertiesForm` consuming the event manifest, redesigned `NotificationItem`, and accessibility/i18n polish.
 
-### Fixed
+### Submodules updated
 
-- N/A
+- **evo-auth-service-community** v1.0.0-rc5 — **(headline)** Three fresh-install fixes: drop foreign-key stub `users` table before `InitSchema` runs so the canonical schema is recreated; `Licensing::SetupGate` becomes observability and never blocks requests; Sidekiq now processes the `licensing` queue so `SetupJob` and `HeartbeatJob` can run. Also adds AuthBridge 1.1.0 extension point (`find_user_by_email` + `sign_in_request`) and minor fixes (`add_fk_if_missing` type-aware, ActiveRecord migration version compatibility).
+- **evo-ai-crm-community** v1.0.0-rc5 — EvoFlow `contact_events` backfill worker (EVO-1243), Ruby mirror of EvoFlow event schema with SchemaValidator (EVO-1261), five new flow node types backed by shared ActionService handlers (EVO-1262), proxy `/contacts/:id/events` with enrich, notifications scope refinements (EVO-1419), Evolution Hub link-inbox-to-existing-channel feature, and an EvoFlow schema sanity fix that crashed the boot of the rc4 develop branch (missing `DEFINITIONS` entries for 5 conversation events).
+- **evo-ai-frontend-community** v1.0.0-rc5 — Shared `EventSelector` + `EventPropertiesForm` consuming event manifest (EVO-1261), redesigned `NotificationItem`, Evolution Hub link-inbox-to-existing-channel, accessibility fix on `ConditionalNode` empty-state hint for WCAG AA (EVO-1454), inert floating-panel wrapper retirement (EVO-1421), i18n Spanish accent fix, locale-aware relative time via date-fns.
+- **evo-ai-processor-community** v1.0.0-rc5 — Stops creating stub `users` table on `metadata.create_all` (the processor's contribution to the fresh-install race that broke auth); GitHub URL rename from `EvolutionAPI` to `evolution-foundation` in docs.
+- **evo-ai-core-service-community** v1.0.0-rc5 — No code changes; version bump to keep the CRM Community family aligned.
+- **evo-bot-runtime** v1.0.0-rc5 — Catch-up release. Service skipped `v1.0.0-rc4` (no functional changes warranted a tag then); `v1.0.0-rc5` realigns the bot-runtime image with the rest of the family. Go binary identical to `v1.0.0-rc3`.
+
+### Notes for upgrading an existing PROD
+
+- **Fresh installs (rc5 against an empty database)**: the multimport-class race condition is resolved. No manual intervention required — the processor no longer creates a `users` stub, and the auth service will drop any pre-existing stub before recreating the canonical schema.
+- **Upgrading an installation broken by the rc4 race condition**: drop the cached stub `users` table (`DROP TABLE users CASCADE` on the shared Postgres) before pulling rc5, then redeploy. The auth service will recreate users with the correct schema on first boot.
+- **Licensing**: `Licensing::SetupGate` no longer returns `503 SETUP_REQUIRED` on any endpoint, including when the licensing server is unreachable. Existing installs with `runtime_configs.api_key` already persisted are unaffected (heartbeat continues normally). Installs where the licensing-server call failed on first boot will now see all endpoints respond correctly while the background `HeartbeatJob` retries activation.
+- **CRM**: an EvoFlow schema validation that runs at boot time (added in the rc4 develop branch) was missing entries for 5 conversation events. The rc5 image registers them. No upgrade action required.
+- **CRM**: includes a `BackfillContactEventsWorker` (Sidekiq, queue `:integrations`, retry: 2) for historical `Message` activity and `ReportingEvent` rows. It is **dry-run by default** and only runs when invoked via `bundle exec rake evo_flow:backfill[<contact_id>]`. No automatic backfill.
+- **Sidekiq (auth)**: the `licensing` queue was added to `config/sidekiq.yml`. If your deployment uses a custom `sidekiq.yml` (overridden via volume mount), make sure to include `- licensing` in the queues list.
+- **bot-runtime**: the image tag jumps from `v1.0.0-rc3` directly to `v1.0.0-rc5`. The Docker image is the same content as rc3 — only the tag is new. Pull `evoapicloud/evo-bot-runtime:1.0.0-rc5` to keep the compose file consistent across the family.
+
+### Repository housekeeping
+
+- The processor history was reorganized between rc4 and rc5 (rebase on `develop`), so the GitHub compare link for the processor between the two tags shows more commits than there are functional changes. The image content is correct.
 
 ## [v1.0.0-rc4] - 2026-05-25
 
