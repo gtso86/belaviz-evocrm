@@ -121,8 +121,8 @@ services:
       dockerfile: docker/Dockerfile
       args:
         BUNDLE_WITHOUT: ''
-        RAILS_ENV: development
-        RAILS_SERVE_STATIC_FILES: 'false'
+        RAILS_ENV: production
+        RAILS_SERVE_STATIC_FILES: 'true'
     restart: unless-stopped
     # ports:
     #   - "3000:3000"
@@ -131,6 +131,8 @@ services:
     env_file: .env
     environment:
       RAILS_ENV: ${RAILS_ENV:-development}
+      RAILS_SERVE_STATIC_FILES: 'true'
+      RAILS_LOG_TO_STDOUT: 'true'
       REDIS_URL: redis://:${REDIS_PASSWORD:-evoai_redis_pass}@redis:6379/0
       POSTGRES_HOST: postgres
       EVO_AUTH_SERVICE_URL: http://evo-auth:3001
@@ -153,6 +155,10 @@ services:
         condition: service_healthy
       evo-auth:
         condition: service_healthy
+      evo-core:
+        condition: service_healthy
+      evo-bot-runtime:
+        condition: service_healthy
     entrypoint: docker/entrypoints/rails.sh
     command: ['bundle', 'exec', 'rails', 's', '-p', '3000', '-b', '0.0.0.0']
     healthcheck:
@@ -168,12 +174,14 @@ services:
       dockerfile: docker/Dockerfile
       args:
         BUNDLE_WITHOUT: ''
-        RAILS_ENV: development
-        RAILS_SERVE_STATIC_FILES: 'false'
+        RAILS_ENV: production
+        RAILS_SERVE_STATIC_FILES: 'true'
     restart: unless-stopped
     env_file: .env
     environment:
-      RAILS_ENV: ${RAILS_ENV:-development}
+      RAILS_ENV: production
+      RAILS_SERVE_STATIC_FILES: 'true'
+      RAILS_LOG_TO_STDOUT: 'true'
       REDIS_URL: redis://:${REDIS_PASSWORD:-evoai_redis_pass}@redis:6379/0
       POSTGRES_HOST: postgres
       EVO_AUTH_SERVICE_URL: http://evo-auth:3001
@@ -193,12 +201,17 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      evo-auth:
+        condition: service_healthy
+      evo-core:
+        condition: service_healthy
+      evo-bot-runtime:
+        condition: service_healthy
     # Disable inherited HTTP healthcheck — Sidekiq has no web server.
     healthcheck:
       disable: true
     entrypoint: docker/entrypoints/rails.sh
     command: ['bundle', 'exec', 'sidekiq', '-C', 'config/sidekiq.yml']
-
   # ---------------------------------------------------------------------------
   # Core Service (Go / Gin) — Port 5555
   # ---------------------------------------------------------------------------
@@ -234,7 +247,7 @@ services:
           '--no-verbose',
           '--tries=1',
           '--spider',
-          'http://localhost:5555/api/v1/health',
+          'http://localhost:5555/health',
         ]
       interval: 15s
       timeout: 5s
