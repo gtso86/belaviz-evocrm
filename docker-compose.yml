@@ -212,7 +212,11 @@ services:
     healthcheck:
       disable: true
     # entrypoint: docker/entrypoints/rails.sh
-    command: ['bundle', 'exec', 'sidekiq', '-C', 'config/sidekiq.yml']
+    entrypoint: ['/bin/sh', '-lc']
+    #command: ['bundle', 'exec', 'sidekiq', '-C', 'config/sidekiq.yml']
+    command: >
+      bundle install &&
+      bundle exec sidekiq -C config/sidekiq.yml
 
   # ---------------------------------------------------------------------------
   # Core Service (Go / Gin) — Port 5555
